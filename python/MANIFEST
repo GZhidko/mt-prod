@@ -1,0 +1,6 @@
+MANIFEST
+TODO
+sweetuammodule.c
+setup.py
+examples/async-client.py
+examples/sync-client.py

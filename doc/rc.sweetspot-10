@@ -1,0 +1,53 @@
+#!/bin/sh
+#
+# CVS:cfengine!
+#
+# TEST SERVER sweetspot mgmt 
+
+SWEET_ID="9"
+SWEET_INT_IP="10.40.15.39"
+SWEET_EXT_IP="194.154.70.109"
+
+start() {
+	/sbin/ifconfig bond0.2 add $SWEET_EXT_IP netmask 255.255.255.192
+        /sbin/arping -c 2 -A -I bond0.2 $SWEET_EXT_IP
+        /usr/sbin/ethtool -K bond0.2 gro off tso off
+	/sbin/ifconfig bond0.12 add $SWEET_INT_IP netmask 255.255.255.192
+        /sbin/arping -c 2 -A -I bond0.12 $SWEET_INT_IP
+        /usr/sbin/ethtool -K bond0.12 gro off tso off
+        /usr/sbin/ethtool -K eht0 gro off tso off
+
+        # TEST TEST TEST 
+	/etc/init.d/sweetspotd-$SWEET_ID-test start
+}
+
+stop() {
+	# TEST TEST TEST
+	/etc/init.d/sweetspotd-$SWEET_ID-test  stop
+	/sbin/ifconfig bond0.2 del $SWEET_EXT_IP netmask 255.255.255.192
+	/sbin/ifconfig bond0.12 del $SWEET_INT_IP netmask 255.255.255.192
+	/usr/sbin/ethtool -K bond0.12 gro off tso off
+        /usr/sbin/ethtool -K eht0 gro off tso off
+        /usr/sbin/ethtool -K bond0.12 gro off tso off
+}
+
+restart() {
+    stop
+    sleep 2
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|restart}"
+esac
+

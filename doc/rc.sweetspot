@@ -1,0 +1,36 @@
+#!/bin/sh
+# Start/stop/restart sweetspot.
+
+# Start sweetspot:
+sweetspot_start() {
+  if [ -x /usr/local/sbin/sweetspot ]; then
+    echo "Starting sweetspot daemon:  /usr/local/sbin/sweetspot"
+    /usr/local/sbin/sweetspot -d breath
+  fi
+}
+
+# Stop sweetspot:
+sweetspot_stop() {
+  killall sweetspot
+}
+
+# Restart sweetspot:
+sweetspot_restart() {
+  sweetspot_stop
+  sleep 1
+  sweetspot_start
+}
+
+case "$1" in
+'start')
+  sweetspot_start
+  ;;
+'stop')
+  sweetspot_stop
+  ;;
+'restart')
+  sweetspot_restart
+  ;;
+*)
+  echo "usage $0 start|stop|restart"
+esac

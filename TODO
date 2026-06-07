@@ -1,0 +1,7 @@
+* implement traffic shaping
+* convert to definite-size variables
+* through-mangler inner hosts networking.
+* implement IP-selective debugging
+* implement UAM cyphering
+
+

@@ -1,0 +1,6 @@
+Revision history for Perl extension SweetAuth.
+
+0.01  Tue Dec 27 19:43:39 2005
+	- original version; created by h2xs 1.23 with options
+		-b 5.0.0 -f -n SweetAuth
+

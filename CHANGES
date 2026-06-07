@@ -1,0 +1,180 @@
+Changes to release 0.1.3
+------------------------
+
+- UAM client library initialization memory leak fixed.
+
+Changes to release 0.1.2
+------------------------
+
+* Introduced request serial number in UAM messages.
+* Introduced an optional method of synchronizing session state
+  modification through UAM via spin-locking.
+* Introduced a feature of externally programmable session retention
+  duration. This works through new UAM RT command.
+* Packet filter syntax now accepts alternative rule syntax for
+  rate limiting which could be applied to both PASS and DNAT statements.
+* Current Filter-Id, traffic, bandwidth and time limits are added 
+  to accounting report.
+* Ignore malformed UAM messages at UAM server.
+* Verify UAM params type at Python driver.
+* Automated Python module build added.
+
+Changes to release 0.1.1
+------------------------
+
+* WARNING: this sweetspot revision renders your current sweetspot configs
+  incompatible! But it is worth updating, read on!
+* Network I/O system re-designed to use TUN interface instead of
+  attaching directly to network card. This helps to improve performance
+  by a factor of 2 or 3 by:
+  1) eliminating echo traffic processing
+  2) in case of multi-instance setup, this lets separate trafic flows
+     by sweetspot instances (policy routing).
+  It also improves portability - packet socket interface support is no
+  longer required to run sweetspot. System must support TUN/TAP driver,
+  though.
+* Packet tuples hashing algorithm dramatically improved for better
+  hash distribution over data set, what practically eliminated hash
+  collisions at lhash storage.
+* Dedicated packet validation code dropped (due to parasite traffic
+  elimination).
+* Hashing algorithm at IP fragments tracking code fixed to distinguish
+  packet direction. This helps to reduce hash collision rate.
+* Statistics on lhash operation is now collected and logged.
+* On-line packet filters reload feature implemented.
+* Packet filter syntax now supports port ranges and lists.
+* Regular operation logging reduced.
+
+Changes to release 0.0.21
+-------------------------
+
+* Re-schedule global SNAT relations expiration for active relations.
+
+Changes to release 0.0.20
+-------------------------
+
+* Unbound code in previous release used to cause compilation error.
+* Accounting interim interval is now configurable at session-level
+  (WARNING: this changed UAM UP command format).
+* Repetitive session starts will not reset session duration anymore.
+* Handle oversized filter text gracefully. Maximum filter size increased.
+* Skip further processing for packets marked as outgoing by the kernel
+  what might improve overall performance.
+* SNAT endpoints allocation logic completely reworked 
+
+Changes to release 0.0.19
+-------------------------
+
+* Fix to SNAT public IP allocation policy that used to pick IPs
+  beyond configured SNAT network.
+* Fix to an uninitialized out variable in ports-per-IP packing factor
+  calculation at SNAT code.
+
+Changes to release 0.0.18
+-------------------------
+
+* UAM code now handles larger messages (512 bytes) what was needed
+  for storing large chunks of session context.
+* Fix to UAM server module to make it ignoring UAM protocol errors.
+* File descriptor leak fixed in config file parsing code.
+* Memory leaks in SNAT relations, UAM client and on gauge hash entry
+  reuse fixed.
+* Leaking session context fixed.
+* Pretty buffers sizes enlarged.
+* Code cleaned up followed -Wall reporting
+
+Changes to release 0.0.17
+-------------------------
+
+* Typical setup is now on a single-machine.
+* Web auth CGI scripts re-worked to use Perl UAM client.
+* SNAT subsystem API reworked for clarity when SNAT is disabled.
+
+Changes to release 0.0.16
+-------------------------
+
+* Expire SNAT relations to keep memory footprint within limits.
+* Dump TCP and UDP port ranges for SNAT in dedicated RADIUS attributes.
+* NAT endpoint management re-designed in a modular way.
+* Accounting code re-designed in a modular way on a sub-system grain basis.
+* SNAT code now does private->public TCP port mapping more statically
+  to facilitate pre-empted SNAT relation recovery.
+* Accounting records being generated are now chronologically ordered.
+* Event Context implemented (in contrary to session context, this one
+  is stateless so it goes directly to accounting).
+* RFC2869 Interim accounting generation implemented.
+* Count and report Acct-In/Output-Packets.
+* Sweet-In/Output-Octets replaced with RFC2869 Acct-In/Output-Gigawords.
+* Some VSA attributes renamed to reflect the subsystem they belong to.
+* An arbitrary packet filter can now be assigned to captured sessions as well.
+* Measure and report bandwidth values (WARNING: UAM protocol changed).
+* Multi-instance operation mode implemented.
+
+Changes to release 0.0.15
+-------------------------
+
+* IP fragmentation now supported by means of IP fragments tracking.
+* Packet checksum regeneration replaced with incremental checksum
+  adjustment.
+
+Changes to release 0.0.14
+-------------------------
+
+* Intristically foreign to sweetspot parameters of user-name and
+  nas-ip-address replaced with a single string-typed "context"
+  parameter to be used by outer apps for keeping specific session
+  details.
+* Fix to ICMP checksum calculation for uneven packet sizes.
+* Fix to SNAT endpoint resolution when multiple user-networks is configured.
+* Fix to traffic accounting code passing through SNAT.
+
+Changes to release 0.0.13
+-------------------------
+
+* Full-cone source NAT is now supported. Besides generic NAT,
+  this implementation allows for unambiguous, dynamic pubic<->private
+  UDP/TCP/ICMP flow endpoints resolution.
+* Major internal re-design. Most importantly, passing packets
+  are now represented and handled in form of tuple chains
+  (concept borrowed from iptables).
+* Debugging facility improved.
+
+Changes to release 0.0.12
+-------------------------
+
+* Handle traffic limits/accounting in unsigned long long.
+* Session duration & idle times equal to 0 now means no-limit (it 
+  also has become the default). Default traffic limit now approaches
+  infinity.
+* Bugfix to acct-stop-time - acct-start-time == session-duration
+  equation.
+* Sweetspot is now user interface centric. That is "inward" now universally
+  means "coming from user" and vice versa.
+
+Changes to release 0.0.11
+-------------------------
+
+* filtering by TCP flags implemented (for directional TCP filtering).
+* Bugfix to Acct-Input/Output-Octets swap-over.
+* Minor fixes.
+
+Changes to release 0.0.10
+-------------------------
+
+* Sessions pool is now indexed by SSLeay's lhash mostly to be able
+  to use sparse user network space (e.g. multiple user networks).
+* Configuration options user-network & user-netmask replaced with
+  a single user-networks setting which accepts a sequence of CIDRs.
+
+Changes to release 0.0.9
+------------------------
+
+* UAM protocol redesigned for usability. Session limits
+  can now be queried via UAM.
+* NAS-IP-Address & User-Name session attributes can now be inherited
+  from previous session. The intention is to be able to assign these
+  attributes prior to application-specific user authentication (RADIUS
+  accounting from AP's, DHCP events) where these attributes may not be 
+  available.
+* Fixes and cleanups.
+

@@ -1,0 +1,7 @@
+
+
+# Define the list of test programs
+sbin_PROGRAMS = natSrsEndAssign
+
+
+natSrsEndAssign_SOURCES = natSrcEndpointAssiTest.c

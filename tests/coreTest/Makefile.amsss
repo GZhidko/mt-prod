@@ -1,0 +1,7 @@
+
+
+# Define the list of test programs
+sbin_PROGRAMS = coreTest
+
+
+natSrsEndAssign_SOURCES = coreTest.c

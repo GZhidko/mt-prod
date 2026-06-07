@@ -1,0 +1,366 @@
+/*
+ * Sweetspot -- an OSI layer 3 network access controller.
+ * Written by Ilya Etingof <ilya@glas.net>, 2006.
+ *
+ * Partially based on http://chillispot.org.
+ * Copyright (C) 2003, 2004, 2005 Mondru AB.
+ * The contents of this file may be used under the terms of the GNU
+ * General Public License Version 2, provided that the above copyright
+ * notice and this permission notice is included in all copies or
+ * substantial portions of the software.
+ */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <time.h>
+#include <errno.h>
+#include "sweetspot.h"
+#include "if.h"
+#include "pretty.h"
+#include "relay_inward.h"
+#include "tuple.h"
+#include "gauge.h"
+#include "nat_dst.h"
+#include "nat_dst_endpoint.h"
+#include "nat_src.h"
+#include "frag.h"
+#include "frag_tuple.h"
+#include "filter.h"
+#include "filter_match.h"
+#include "shape.h"
+#include "memgmt.h"
+#include "cfg.h"
+#include "log.h"
+#include <netinet/in.h>
+#ifdef USE_DMALLOC
+#include <dmalloc.h>
+#endif
+
+#define DROP_SHAPE_SEND_FAILED    0
+#define DROP_SHAPE_SCHEDULE_ERROR 1
+#define DROP_SHAPE_DELAY_ERROR    2
+#define PACKETS_IN                3
+#define BYTES_IN                  4
+
+volatile static int global_stats_relay_in[5];
+
+static int __create(sw_socket_handler_t *self, int pid) {
+  char int_if[32], ext_if[32], cmd[256];
+
+  sprintf(int_if, "tun%d",pid);
+  self->socket = sw_if_open(int_if, SW_IF_READ);
+  if (self->socket == -1) {
+    return -1;
+  }
+
+  if (sw_debug_flags & (SW_DEBUG_BREATH|SW_DEBUG_RELAY))
+    sw_log("%s:%d inner iface %s opened for input (fd %d)",
+           __FILE__, __LINE__, int_if, self->socket);
+
+  self->priv = malloc(sizeof(sw_relay_inward_t));
+  if (!self->priv) {
+    sw_log("%s:%d malloc() failed: %s", __FILE__, __LINE__, strerror(errno));
+    close(self->socket);
+    return -1;
+  }
+
+  sprintf(ext_if, "tun%d",pid+1);
+  ((sw_relay_inward_t *)self->priv)->socket = sw_if_open(ext_if, SW_IF_WRITE);
+  if (((sw_relay_inward_t *)self->priv)->socket == -1) {
+    close(self->socket);
+    free(self->priv);
+    return -1;
+  }
+
+  if (sw_debug_flags & (SW_DEBUG_BREATH|SW_DEBUG_RELAY))
+    sw_log("%s:%d outer iface %s opened for output (fd %d)",  __FILE__,
+           __LINE__, ext_if, ((sw_relay_inward_t *)self->priv)->socket);
+
+  sprintf(cmd, "%s %s %s",
+          sw_config_get("iface-inner-rc", SW_RELAY_INNER_RC),
+          int_if, ext_if);
+  if (system(cmd) == -1) {
+    sw_log("%s:%d system(\"%s\") failed: %s",  __FILE__, __LINE__,
+           cmd, strerror(errno));
+    return -1;
+  }
+
+  sw_relay_inward_stats_null();
+
+  if (sw_debug_flags & SW_DEBUG_RELAY)
+    sw_log("%s:%d system(\"%s\") succeeded",  __FILE__, __LINE__, cmd);
+
+  return 0;
+}
+
+static int __destroy(sw_socket_handler_t *self) {
+  if (sw_debug_flags & SW_DEBUG_RELAY) 
+    sw_log("%s:%d closing inner iface for input", __FILE__, __LINE__);
+
+  if (self->socket != -1)
+    sw_if_close(self->socket);
+
+  if (sw_debug_flags & SW_DEBUG_RELAY) 
+    sw_log("%s:%d closing outer iface for output", __FILE__, __LINE__);
+
+  if (((sw_relay_inward_t *)self->priv)->socket != -1) {
+    sw_if_close(((sw_relay_inward_t *)self->priv)->socket);
+  }
+
+  if (self->priv) {
+    free(self->priv);
+    self->priv = NULL;
+  }
+  sw_relay_inward_stats_print();
+  return 0;
+}
+
+static int __recv(sw_socket_handler_t *self, char * buf,struct sockaddr_in * addr, char * cyphertext ) {
+   return sw_if_recv(self->socket, buf, 65536);
+}
+
+static int __proc(sw_socket_handler_t *self, char * buf, int length,struct sockaddr_in * addr, char * cyphertext, pthread_rwlock_t * mtx ) {
+  sw_tuple_t *hsrc, *osrc, *src, *dst, *hdst, *odst, *nat;
+  sw_filter_rule_t *rule = NULL;
+  sw_memgmt_buf_t *p_buf;
+  char * packet = buf;
+  int delaytime, shape_flag;
+
+  //sw_log("%s:%d processing inward packet, %d", __FILE__, __LINE__, length);
+
+  if (sw_debug_flags & SW_DEBUG_RELAY)
+    sw_log("%s:%d processing inward packet", __FILE__, __LINE__);
+
+//  if ((length = sw_if_recv(self->socket, packet, sizeof(packet))) == -1) {
+//    return -1;
+//  }
+
+  if (length == 0) {
+    return 0; /* Drop */
+  }
+
+  if (sw_debug_flags & SW_DEBUG_RELAY)
+    sw_log("%s:%d read %d octets", __FILE__, __LINE__, length);
+
+  if (sw_tuple_fetch(&src, &dst, SW_TUPLE_PROTO_DEFAULT, 
+                     packet, length) == -1) {
+    sw_tuple_free(src); sw_tuple_free(dst);
+
+    return 0; /* Drop */
+  }
+  
+  if (sw_debug_flags & SW_DEBUG_RELAY) 
+    sw_log("%s:%d from %s to %s", __FILE__, __LINE__,
+           sw_tuple_pretty(src), sw_tuple_pretty(dst));
+
+ // pthread_mutex_lock(mtx);
+  if (sw_frag_do(&hsrc, &hdst, src, dst) == -1) {
+    sw_tuple_free(src); sw_tuple_free(dst);
+    //pthread_mutex_unlock(mtx);
+    return 0; /* Drop */
+  }
+
+
+
+
+  nat = osrc = odst = NULL;
+
+  pthread_rwlock_rdlock(mtx);
+  int fm_res = sw_filter_match(&rule, hsrc ? hsrc : src, hdst ? hdst : dst,
+                               SW_FILTER_MATCH_INWARD);
+  pthread_rwlock_unlock(mtx);
+  switch(fm_res) {
+  case 0:
+    shape_flag = 0;
+    if (sw_debug_flags & SW_DEBUG_RELAY)
+      sw_log("%s:%d unmatched packet %s->%s passed filter",
+             __FILE__, __LINE__, sw_tuple_pretty(src),
+             sw_tuple_pretty(dst));
+    break;
+  case 1:
+    shape_flag = rule->action&SW_FILTER_ACTION_SHAPE;
+    switch(rule->action) {
+    case SW_FILTER_ACTION_PASS:
+    case SW_FILTER_ACTION_PASS|SW_FILTER_ACTION_SHAPE:
+      if (sw_debug_flags & SW_DEBUG_RELAY)
+        sw_log("%s:%d matched packet %s->%s passed filter%s", 
+               __FILE__, __LINE__, sw_tuple_pretty(src),
+               sw_tuple_pretty(dst),
+               shape_flag ? " & shaped" : "");
+      break;
+    case SW_FILTER_ACTION_BLOCK:
+      if (sw_debug_flags & SW_DEBUG_RELAY)
+        sw_log("%s:%d matched packet %s->%s dropped filter", 
+               __FILE__, __LINE__, sw_tuple_pretty(src),
+               sw_tuple_pretty(dst));
+      sw_tuple_free(src); sw_tuple_free(dst);
+
+      return 0;
+    case SW_FILTER_ACTION_DNAT:
+    case SW_FILTER_ACTION_DNAT|SW_FILTER_ACTION_SHAPE:
+      if (hdst ? sw_frag_tuple_clone(&nat, hdst): \
+          sw_tuple_clone(&nat, dst) == -1) {
+        sw_tuple_free(src); sw_tuple_free(dst);
+
+        return -1;
+      }
+      if (sw_nat_dst_endpoint_assign(nat, htonl(rule->dnat.ip), 
+                                     htons(rule->dnat.port)) == -1) {
+        sw_tuple_free(src); sw_tuple_free(dst); sw_tuple_free(nat);
+
+        return -1;
+      }
+     // pthread_mutex_lock(mtx);
+      if (sw_nat_dst_do(hsrc ? hsrc : src, hdst ? hdst : dst, nat) == -1) {
+        sw_tuple_free(src); sw_tuple_free(dst); sw_tuple_free(nat);
+       // pthread_mutex_unlock(mtx);
+        return 0; /* Drop */
+      }
+     // pthread_mutex_unlock(mtx);
+      if (sw_debug_flags & SW_DEBUG_RELAY)
+        sw_log("%s:%d packet %s->%s DNAT'ed to %s%s", __FILE__, __LINE__,
+               sw_tuple_pretty(src), sw_tuple_pretty(dst),
+               sw_tuple_pretty(nat),
+               shape_flag ? " & shaped" : "");
+      odst = dst;
+      hdst ? sw_frag_tuple_clone(&dst, nat) : sw_tuple_clone(&dst, nat);
+      sw_tuple_free(nat);
+      break; /* Re-dir and pass */
+    case SW_FILTER_ACTION_SHAPE:
+      if (sw_debug_flags & (SW_DEBUG_RELAY|SW_DEBUG_SHAPE))
+        sw_log("%s:%d matched packet %s->%s shaped filter",
+               __FILE__, __LINE__, sw_tuple_pretty(src),
+               sw_tuple_pretty(dst));
+      break;
+    default:
+      sw_log("%s:%d unexpected decision %d", __FILE__, __LINE__, rule->action);
+      sw_tuple_free(src); sw_tuple_free(dst);
+
+      return -1;
+    }
+    break;
+  default:
+    sw_tuple_free(src); sw_tuple_free(dst);
+
+    return 0; /* Drop */
+  }
+
+  pthread_rwlock_wrlock(mtx);
+ 
+  if (sw_gauge_update(hsrc ? hsrc : src, length, SW_GAUGE_DIR_IN) == -1) {
+    sw_tuple_free(src); sw_tuple_free(dst); 
+    if (odst) sw_tuple_free(odst);
+    pthread_rwlock_unlock(mtx);
+    return -1;
+  }
+  pthread_rwlock_unlock(mtx);
+
+  if (sw_nat_src_enabled_flag) {
+    if (sw_nat_src_do(&nat, hsrc ? hsrc : src) == -1) {
+      sw_tuple_free(src); sw_tuple_free(dst);
+      if (odst) sw_tuple_free(odst);
+      //pthread_mutex_unlock(mtx);
+      return 0; /* Drop */
+    }
+
+
+    osrc = src;
+    hsrc ? sw_frag_tuple_clone(&src, nat) : sw_tuple_clone(&src, nat);
+  }
+
+
+
+  if (sw_tuple_commit(packet, length, src, dst, osrc, odst) == -1) {
+    sw_tuple_free(src); sw_tuple_free(dst);
+    if (osrc) sw_tuple_free(osrc); if (odst) sw_tuple_free(odst);
+    //pthread_mutex_unlock(mtx);
+    return 0; /* Drop */
+  }
+
+
+
+/*  global_stats_relay_in[PACKETS_IN]++;
+  global_stats_relay_in[BYTES_IN] += length; */
+
+  if (shape_flag) {  
+    switch(delaytime = sw_shape_schedule(hsrc ? hsrc : osrc, length,
+                                         rule->shape.rate, SW_SHAPE_IN, NULL)) {
+      case 0: /* send packet immediately */
+
+
+        if (sw_if_send(((sw_relay_inward_t *)self->priv)->socket,
+                   packet, length) == -1) {
+          global_stats_relay_in[DROP_SHAPE_SEND_FAILED]++;
+
+          break; /* Drop */
+        }
+        if (sw_debug_flags & (SW_DEBUG_RELAY | SW_DEBUG_SHAPE))
+
+
+        break;
+
+      case -1: /* error */
+        global_stats_relay_in[DROP_SHAPE_SCHEDULE_ERROR]++;
+        break; /* Drop */
+      default: /* packet is placed into a queue */
+        if (sw_memgmt_get_buf(&p_buf, length) == -1)
+          break; /* Drop */ 
+        memcpy(p_buf->buf, packet, length);
+        if (sw_shape_delay(self->socket, delaytime, p_buf, length) == -1) {
+          global_stats_relay_in[DROP_SHAPE_DELAY_ERROR]++;
+          sw_memgmt_free_buf(p_buf->idx);
+        } else if (sw_debug_flags & SW_DEBUG_SHAPE)
+            sw_log("%s:%d %s->%s placed into a queue %d", __FILE__, __LINE__,
+                    sw_tuple_pretty(src), sw_tuple_pretty(dst), self->socket);
+    }
+  } else
+  {
+
+    sw_if_send(((sw_relay_inward_t *)self->priv)->socket, packet, length);
+
+  }  /* if sw_if_send failed => packet dropped */
+
+
+  if (osrc) sw_tuple_free(osrc); if (odst) sw_tuple_free(odst);
+  sw_tuple_free(src); sw_tuple_free(dst);
+  return 0;
+}
+
+static int __send(sw_socket_handler_t *self, char *packet, int length) {
+  return sw_if_send(((sw_relay_inward_t *)self->priv)->socket, packet, length);
+}
+
+int sw_relay_inward_stats_null() {
+  global_stats_relay_in[DROP_SHAPE_SEND_FAILED] = 0;
+  global_stats_relay_in[DROP_SHAPE_SCHEDULE_ERROR] = 0;
+  global_stats_relay_in[DROP_SHAPE_DELAY_ERROR] = 0;
+  global_stats_relay_in[PACKETS_IN] = 0;
+  global_stats_relay_in[BYTES_IN] = 0;
+  return 0;
+}
+
+int sw_relay_inward_stats_print() {
+  sw_log("%s:%d INWARD_drops: send %d, schedule %d, delay %d",
+          __FILE__, __LINE__, global_stats_relay_in[DROP_SHAPE_SEND_FAILED],
+          global_stats_relay_in[DROP_SHAPE_SCHEDULE_ERROR],
+          global_stats_relay_in[DROP_SHAPE_DELAY_ERROR]);
+/*  sw_log("%s:%d INWARD_stats: packets %d, bytes %d", __FILE__, __LINE__,
+         global_stats_relay_in[PACKETS_IN], global_stats_relay_in[BYTES_IN]); */
+  return 0;
+}
+
+sw_socket_handler_t relay_inward = {
+  "INWARD",
+  0,
+  &__create,
+  &__destroy,
+  &__recv,
+  &__proc,
+  &__send,
+  NULL
+};

@@ -1,0 +1,42 @@
+.svn/
+autom4te.cache/
+*~
+
+# Autotools/configure runtime output
+Makefile
+src/Makefile
+tests/Makefile
+doc/Makefile
+perl/Makefile
+python/Makefile
+config.log
+config.status
+config.h
+stamp-h1
+libtool
+
+# Libtool/compiler output
+.deps/
+.libs/
+*.o
+*.lo
+*.la
+
+# Binaries and dumps
+src/sweetspot
+src/sweetuam
+tests/*b
+tests/*.trs
+tests/*.log
+tests/test-suite.log
+core
+core.*
+*.core
+
+# Test runtime artifacts
+tests/coreTest/*.log
+tests/coreTest/generated*.conf
+tests/coreTest/filters_new/
+tests/uamConcurrencyTest/*.log
+tests/uamConcurrencyTest/generated*.conf
+tests/uamConcurrencyTest/filters/

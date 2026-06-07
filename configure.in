@@ -1,0 +1,256 @@
+dnl
+dnl Configure script pattern for sweetspot package. 
+dnl Process this file with autoconf to produce a configure script.
+dnl
+dnl Written by Ilya Etingof <ilya@glas.net>, 2006
+dnl
+dnl $Log: not supported by cvs2svn $
+dnl Revision 1.32  2008/02/18 14:56:05  ilya
+dnl 0.0.18
+dnl
+dnl Revision 1.31  2007/12/25 19:20:46  ilya
+dnl AC_CHECK_LIB replaced with AC_SEARCH_LIBS
+dnl
+dnl Revision 1.30  2007/12/25 19:08:50  ilya
+dnl check for socket stuff added
+dnl
+dnl Revision 1.29  2007/08/17 13:01:02  ilya
+dnl 0.0.17
+dnl
+dnl Revision 1.28  2007/08/17 13:00:46  ilya
+dnl export config vars into Makefile's
+dnl
+dnl Revision 1.27  2007/07/12 13:18:50  ilya
+dnl return back to CPP-based macro passing
+dnl
+dnl Revision 1.26  2007/07/12 11:55:52  ilya
+dnl put CPP macros into config.h rather than to cpp command line to let
+dnl other apps use them
+dnl
+dnl Revision 1.25  2007/07/10 14:47:51  ilya
+dnl default sweetspot state is now under ${localstatedir}
+dnl
+dnl Revision 1.24  2007/02/19 16:37:32  ilya
+dnl 0.0.16
+dnl
+dnl Revision 1.23  2006/12/01 13:10:57  ilya
+dnl 0.0.15
+dnl
+dnl Revision 1.22  2006/11/08 14:49:11  ilya
+dnl oops, wrong version number
+dnl should be 0.0.14
+dnl
+dnl Revision 1.21  2006/11/08 14:47:41  ilya
+dnl 0.0.15
+dnl
+dnl Revision 1.20  2006/10/06 12:57:54  ilya
+dnl 0.0.14
+dnl
+dnl Revision 1.19  2006/09/16 07:18:28  ilya
+dnl synced back to 0.0.13
+dnl
+dnl Revision 1.18  2006/09/12 14:01:07  ilya
+dnl 0.0.15
+dnl
+dnl Revision 1.17  2006/08/17 14:26:00  ilya
+dnl 0.0.14
+dnl
+dnl Revision 1.16  2006/08/07 15:06:55  ilya
+dnl 0.0.13
+dnl
+dnl Revision 1.15  2006/08/02 09:07:08  ilya
+dnl updated
+dnl
+dnl Revision 1.14  2006/06/06 13:22:11  ilya
+dnl 0.0.11
+dnl
+dnl Revision 1.13  2006/06/01 15:19:07  ilya
+dnl 0.0.10
+dnl
+dnl Revision 1.12  2006/04/13 21:39:08  ilya
+dnl 0.0.9
+dnl
+dnl Revision 1.11  2006/03/28 14:26:16  ilya
+dnl include perl stuff into the distribution tarball
+dnl
+dnl Revision 1.10  2006/03/23 16:22:51  ilya
+dnl more propaganda
+dnl
+dnl Revision 1.9  2006/03/22 17:18:51  ilya
+dnl doc/filters/Makefile
+dnl
+dnl Revision 1.8  2006/03/22 17:07:57  ilya
+dnl config and runtime dir options support improved
+dnl
+dnl Revision 1.7  2006/03/22 07:15:51  ilya
+dnl 0.0.7
+dnl
+dnl Revision 1.6  2006/03/17 12:08:51  ilya
+dnl 0.0.6
+dnl
+dnl Revision 1.5  2006/03/02 08:11:04  ilya
+dnl 0.0.5
+dnl
+dnl Revision 1.4  2006/02/15 15:36:06  ilya
+dnl 0.0.4
+dnl
+dnl Revision 1.3  2006/01/25 17:41:02  ilya
+dnl 0.0.3
+dnl
+dnl Revision 1.2  2005/12/27 12:44:27  ilya
+dnl 0.0.2
+dnl
+dnl Revision 1.1  2005/11/25 17:35:12  ilya
+dnl missing
+dnl
+
+dnl Process this file with autoconf to produce a configure script.
+
+AC_INIT
+AC_CONFIG_SRCDIR([src/sweetspot.c])
+
+dnl Get canonical system information
+AC_CANONICAL_TARGET
+
+dnl Init automake
+AM_INIT_AUTOMAKE(sweetspot, 0.1.3)
+AM_CONFIG_HEADER(config.h)
+AM_PATH_PYTHON()
+AC_ARG_VAR([PYTHON_INCLUDE], [Include flags for python, bypassing python-config])
+AC_ARG_VAR([PYTHON_CONFIG], [Path to python-config])
+AS_IF([test -z "$PYTHON_INCLUDE"], [
+   AS_IF([test -z "$PYTHON_CONFIG"], [
+     AC_PATH_PROGS(
+       [PYTHON_CONFIG],
+       [python$PYTHON_VERSION-config python-config],
+       [no],
+       [`dirname $PYTHON`])
+     AS_IF(
+       [test "$PYTHON_CONFIG" = no],
+       [AC_MSG_WARN([cannot find python-config for $PYTHON. use logic from distutils.sysconfig.get_python_inc()])])
+   ])
+   AC_MSG_CHECKING([python include flags])
+   AS_IF(
+     [test "$PYTHON_CONFIG" != no],
+     [PYTHON_INCLUDE=`$PYTHON_CONFIG --includes`],
+     [PYTHON_INCLUDE=`$PYTHON -c 'import sys, os; print(os.path.join(sys.prefix, "include", "python" + ".".join(map(str, sys.version_info[[:2]]))))'`])
+   AC_MSG_RESULT([$PYTHON_INCLUDE])
+])
+
+dnl Default config dir
+AC_ARG_WITH(config-dir, [  --with-config-dir=LOC   location of the config dir (SYSCONFDIR/sweetspot/)])
+if test "X${with_config_dir}" != "Xno" && test "X${with_config_dir}" != "Xyes" && test "X${with_config_dir}" != "X"; then
+   SW_DEFAULT_CONFIG_DIR=${with_config_dir}
+else
+   SW_DEFAULT_CONFIG_DIR="${sysconfdir}/sweetspot"
+fi
+AC_SUBST(SW_DEFAULT_CONFIG_DIR)
+CPPFLAGS="${CPPFLAGS} -DSW_DEFAULT_CONFIG_DIR=\"\\\"${SW_DEFAULT_CONFIG_DIR}\\\"\""
+
+AC_ARG_WITH(runtime-dir, [  --with-runtime-dir=LOC  sweetspot runtime directory (LOCALSTATEDIR/sweetspot/)])
+if test "X${with_runtime_dir}" != "Xno" && test "X${with_runtime_dir}" != "Xyes" && test "X${with_runtime_dir}" != "X"; then
+    SW_DEFAULT_RUNTIME_DIR=${with_runtime_dir}
+else
+    SW_DEFAULT_RUNTIME_DIR="${localstatedir}/sweetspot"
+fi
+AC_SUBST(SW_DEFAULT_RUNTIME_DIR)
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AM_PROG_LIBTOOL
+AC_PROG_YACC
+AM_PROG_LEX
+
+AC_PATH_PROGS([MY_RM_PROGRAM],[rm unlink],[echo],[/bin:/usr/bin:/usr/local/bin:$PATH])
+if test X$MY_RM_PROGRAM == "Xecho"; then
+   AC_MSG_WARN([File removal tool not found -- could not uninstall])
+fi
+
+dnl Checks for libraries.
+
+dnl Checks for header files.
+m4_warn([obsolete],
+[The preprocessor macro `STDC_HEADERS' is obsolete.
+  Except in unusual embedded environments, you can safely include all
+  ISO C90 headers unconditionally.])dnl
+# Autoupdate added the next two lines to ensure that your configure
+# script's behavior did not change.  They are probably safe to remove.
+AC_CHECK_INCLUDES_DEFAULT
+AC_PROG_EGREP
+
+AC_CHECK_HEADERS(fcntl.h sys/time.h syslog.h unistd.h getopt.h sys/select.h sys/socket.h)
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_SIZE_T
+m4_warn([obsolete],
+[your code may safely assume C89 semantics that RETSIGTYPE is void.
+Remove this warning and the `AC_CACHE_CHECK' when you adjust the code.])dnl
+AC_CACHE_CHECK([return type of signal handlers],[ac_cv_type_signal],[AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([#include <sys/types.h>
+#include <signal.h>
+],
+		 [return *(signal (0, 0)) (0) == 1;])],
+		   [ac_cv_type_signal=int],
+		   [ac_cv_type_signal=void])])
+AC_DEFINE_UNQUOTED([RETSIGTYPE],[$ac_cv_type_signal],[Define as the return type of signal handlers
+		    (`int' or `void').])
+
+AC_STRUCT_TM
+
+dnl Checks for library functions.
+AC_CHECK_LIB(m, ceilf)
+AC_SEARCH_LIBS([socket], [socket])
+AC_SEARCH_LIBS([inet_addr], [nsl])
+
+AC_ARG_WITH(python, [  --with-python[[=PATH]]    include Python binding ])
+if test "X${with_python}" != "Xno" -o "X${with_python}" = "X"; then
+  if test "X${with_python}" = "Xyes" -o "X${with_python}" = "X"; then
+    WITH_PYTHON="python"
+  else
+    WITH_PYTHON="${withval}"
+  fi
+  PY_VERSION=$($WITH_PYTHON -c 'from sys import version; print(version.split().pop(0))')
+  PY_INCLUDE=$($WITH_PYTHON -c 'from distutils import sysconfig; print(sysconfig.get_config_var("CONFINCLUDEPY"))')
+  PY_SITEDEST=$($WITH_PYTHON -c 'from distutils import sysconfig; print(sysconfig.get_config_var("LIBDEST")+"/site-packages")')
+
+  if test "x${PY_INCLUDE}" = "x" -o "x${PY_SITEDEST}" = "x"; then
+    AC_MSG_RESULT(no)
+    AC_MSG_WARN(your Python went south)
+    unset WITH_PYTHON
+  else
+    AC_MSG_NOTICE(using Python version ${PY_VERSION})
+    AC_SUBST(PY_VERSION)
+    AC_MSG_NOTICE(using Python includes from ${PY_INCLUDE})
+    AC_SUBST(PY_INCLUDE)
+    AC_MSG_NOTICE(using Python site-packages ${PY_SITEDEST})
+    AC_SUBST(PY_SITEDEST)
+  fi
+
+  AC_CHECK_TYPES([Py_ssize_t], [], [], [[#include <$PY_INCLUDE/Python.h>]])
+
+fi
+
+AM_CONDITIONAL(DO_PYTHON, test X$WITH_PYTHON != X)
+
+AC_ARG_WITH(perl, [  --with-perl[[=PATH]]      include Perl binding ])
+if test "X${with_perl}" = "Xyes" -o "X${with_perl}" = "X"; then
+  AC_PATH_PROG(PERL,perl,perl)
+else
+  if test "X${with_perl}" = "Xno"; then
+    PERL="no"
+  else
+    PERL="$withval"
+  fi
+  AC_MSG_NOTICE(using Perl $PERL)
+fi
+AM_CONDITIONAL(DO_PERL, test X$PERL != Xno)
+
+dnl Add a condition to check if the user wants to enable tests
+AC_ARG_ENABLE(tests, [  --enable-tests           enable tests subdirectory], [enable_tests=$enableval], [enable_tests=yes])
+AM_CONDITIONAL(DO_TESTS, test X$enable_tests = Xyes )
+
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile doc/filters/Makefile doc/rc/Makefile perl/Makefile  python/Makefile tests/Makefile])
+AC_OUTPUT

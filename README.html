@@ -1,0 +1,230 @@
+<html>
+<head>
+<title>Sweetspot: Layer 3 network access controller</title>
+</head>
+
+<body link="#66669a" bgcolor="#ffffff">
+
+<font size=2 face="arial, helvetica">
+
+<p align="center">
+
+<table width="80%">
+<tr>
+<td>
+
+<b>
+Introduction
+</b>
+
+<p>
+Sweetspot is an 
+<a href="http://en.wikipedia.org/wiki/Open_source">Open Source</A>
+implementation of the Network Access Controller software that could be
+used in conjunction with
+<a href="http://en.wikipedia.org/wiki/Captive_portal">Captive Portal</A> 
+authentication and accounting technique in wired or wireless LANs (AKA
+<a href="http://en.wikipedia.org/wiki/Hotspot_(wifi)">hotspots</a>).
+
+<p>
+This software is largely based on the code produced by famous
+<a href="http://chillispot.org/">ChilliSpot</a> project, though
+Sweetspot is more focused on:
+<ul>
+<li>IP-layer rather than MAC-layer operations, what appears to the
+architecture of choice in large-scale networks
+<li>Simplicity in design and transparency in implementation.
+</ul>
+<p>
+Similarly to Chillispot, Sweetspot is a user-land daemon whose primary
+activity involves carrying IP packets from one network interface over to 
+another. In typical configuration, Sweetspot resides in-between two IP 
+networks: one is populated with broadband users (<i>inner network</i>) 
+and another is the Internet (<i>outer network</i>). Effectively, all 
+traffic between broadband user and the Internet goes through Sweetspot 
+what makes it an ideal place for performing access control and accounting.
+<p>
+More specifically, Sweetspot is aware of a pool of IP addresses
+assigned to broadband users. IP addresses in this pool logically
+appear in either "<i>captured</i>" or "<i>released</i>" state. When
+IP address is "captured", certain traffic from inner network outwards
+would be re-directed (
+<a href="http://en.wikipedia.org/wiki/Network_address_translation">DNAT</a>
+'ed) to other target, where user authentication may be performed, while 
+other packets would be blocked. Once user authenticates his IP address,
+Sweetspot brings it into a "released" state where most traffic would just 
+pass through.
+<p>
+User authentication is performed in a protocol-specific manner. Most 
+commonly, 
+<a href="http://en.wikipedia.org/wiki/HTTP">http</a>
+connections are re-directed to an authentication web
+server. Another application to consider for example would be
+<a href="http://en.wikipedia.org/wiki/VoIP">VoIP</a> traffic
+re-directed to an
+<a href="http://en.wikipedia.org/wiki/Interactive_Voice_Response">IVR</a>
+based authentication system.
+<p>
+Once broadband user's IP address is "released", Sweetspot counts passing
+octets destined from/to particular IP address and keeps track on session 
+duration and idling time. If it happens so, that either of these figures 
+hit user-specific limit, as set to Sweetspot upon user authentication, 
+IP address would return into "captured" state. Sweetspot session can also 
+be terminated by its owner user in a protocol-specific way consistent with
+authentication procedure.
+<p>
+On session authentication and termination, Sweetspot generates <i>accounting
+start</i> and <i>stop</i> events. In typical configuration, conventional
+<a href="http://en.wikipedia.org/wiki/RADIUS">RADIUS</a> 
+<i>detail file</i> is written.
+<p>
+<b>
+Design
+</b>
+<p>
+The Sweetspot daemon can be viewed as a pipeline between two network 
+interfaces with a valve in-between. This valve takes shape of a packet
+filter that can either pass or drop or redirect packets passing through.
+Authenticated IP addresses can be assigned individual packet filters or no
+packet filter at all. In contrary, all "captured" sessions share a single
+packet filter which may cause captivity and enforce user authentication 
+for certain targets/protocols while it may also open up loopholes to freely
+available services.
+<p>
+A consequence of this design decision is that most Sweetspot configuration
+and features are available through mangling its packet filters, especially
+the one being assigned to unauthenticated IP addresses.
+<p>
+Back to the notion of Sweetspot daemon as a "valve" -- the way to control 
+it is through sending it messages using command-line tool (called 
+<i>sweetuam</i>) from anywhere on the network. These messages carry commands 
+to the Sweetspot daemon to turn particular IP address into "captured" or 
+"released" state and may also include finer options like traffic limits or 
+packet filter name to apply to session.
+<p>
+<b>
+Installation
+</b>
+<p>
+For a typical setup you might need a stand-alone machine sitting at 
+the border of your broadband network. Packets from broadband network
+destined to whatever Internet host will pass through Sweetspot.
+<p>
+Sweetspot installation is as simple as doing 
+./configure && make && make install. Then:
+<ol>
+<li>In <i>/usr/local/etc/sweetspot/sweetspot.conf</i> configure 
+<i>user-networks</i> to list the range of IPs being assigned to your
+broadband clients. Sweetspot would switch packets for these IPs and drop
+all others.
+<li>If you intend to do source NAT for your broadband users, configure
+<i>snat-public-networks</i> to list IP address(es) that will act as
+public SNAT endpoints.
+<li>In <i>/usr/local/etc/sweetspot/filters/anonymous</i> configure
+<i>dnat</i> targets to make Sweetspot re-directing certain type of
+traffic (likely http/https) to your authentication server.
+</ol>
+Also, make sure that:
+<ol>
+<li>TUN/TAP network driver is enabled at kernel. On Linux, the
+<i>CONFIG_TUN=m<i>
+option must be enabled.
+<li>Kernel is configured to perform policy routing. On Linux, the
+<i>CONFIG_IP_ADVANCED_ROUTER=y</i> and
+<i>CONFIG_FIB_RULES=y</i> (?)
+<i>CONFIG_NET_SCHED=y</i> (?)
+options must be enabled and IPROUTE2 package installed.
+<li>IP addresses pre-configured at TUN devices management scripts
+<i>(/usr/local/etc/sweetspot/rc/*)</i>
+do not conflict with your setup. Change them consistently, otherwise.
+<li>In-kernel IP packet forwarding is enabled by 
+<i>echo 1 > /proc/sys/net/ipv4/ip_forward</i>
+</ol>
+<p>
+Once everything is ready, run <i>/usr/local/sbin/sweetspot -d breath</i>
+and watch <i>/var/log/sweetspot.log</i> file for daemon operation and possible
+errors. Then try to verify 
+Sweetspot captivity by using the Internet from a broadband client. If there's
+no connectivity, try running
+<i>/usr/local/sbin/sweetuam UP <your.broadband.ip.address></i>
+tool at the command line to trigger your broadband IP address into
+"released" state at Sweetspot daemon.
+<p>
+If it works as expected, your next step would be to build
+<i>/usr/local/sbin/sweetuam</i> tool invocation into your authentication
+software. There's a Perl module in the distribution for Sweetspot
+session management.
+<p>
+In case you are capturing web traffic to force user authentication:
+<ol>
+<li>Set up your Apache HTTP server using <i>doc/apache-partial.conf</i>
+config file snippet as shipped with Sweetspot distribution.
+<li>
+<li>Copy the <i>doc/sweetspot.cgi</i>, <i>doc/sweetauth.cgi</i> scripts 
+into your Apache cgi-bin directory and fix <i>$host</i> variable in these
+scripts pointing to your authentication server FQDN. If your Sweetspot does
+SNAT, these default web authentication scripts should be modified to invoke
+<i>/usr/local/sbin/sweetuam</i> for private<->public IP address resolution.
+</ol>
+<p>
+Now try browsing the Internet from your broadband network. If everything is
+working alright, you will be captured and brought onto web authentication
+page. Once authenticated there (or just skipping authentication), you
+will obtain Internet connectivity.
+<p>
+<b>
+Precautions and Misfeatures
+</b>
+<p>
+Be aware, that client-server verification has not yet been implemented with UAM
+protocol. This implies that sweetspot<->sweetuam communication would be, at
+least, secured by system IP filters.
+<p>
+Be advised that both layer-2 and layer-3 address-based authentication
+is inherently insecure. Malicious user may sniff and take over somebody's
+else MAC and/or IP address thus committing abuse. IP address based 
+authentication appears even more vulnerable as it may be a bit easer for 
+user to fake IP compared to MAC address.
+<p>
+In order to minimize the risk try to set up your switches or Wi-Fi access
+points in a way that they would remember MAC<->IP pairs to make sure that
+there's no, at least, IP-only fake.
+<p>
+In a broadband network, disallow direct IP-to-IP communication as well as
+broadcasts propagation. In case of IP address takeover this measure would
+ease the impact of possible IP address conflict, 
+<p>
+The real solution to these security issues is the use of WPA
+authentication. In this case you would have to authenticate your WPA
+users through EAP-enabled RADIUS server, then setup user's IP connectivity
+with the Internet through UAM message to sweetspot daemon.
+<p>
+Sweetspot has been developed on a Linux system and has not been tested 
+anywhere else at the time. Though, it's written in plain C for a POSIX
+system so chances are it would run on certain other boxen.
+<p>
+<b>
+Download, license and support
+</b>
+<p>
+This software can be freely downloaded in source form from
+<a href="http://sourceforge.net/project/showfiles.php?group_id=157500">
+SourceForge download servers
+</a>.
+<p>
+Sweetspot inherits 
+<a href="http://chillispot.org/FAQ.html#mozTocId816178">ChilliSpot license</a>
+which is <a href="http://www.gnu.org/licenses/gpl.txt">GPL</a>.
+<p>
+Please, report problems, fixes and feature requests to 
+<a href="mailto:sweetspot-users@lists.sourceforge.net">
+sweetspot-users@lists.sourceforge.net</a>.
+
+<hr>
+<i>Written by Ilya Etingof, 2007. Your sweets are welcome!</i>
+
+</td>
+</tr>
+</table>
+</body>
+</html>

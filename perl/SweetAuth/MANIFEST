@@ -1,0 +1,10 @@
+Changes
+Makefile.PL
+MANIFEST
+ppport.h
+README
+SweetAuth.xs
+t/SweetAuth.t
+fallback/const-c.inc
+fallback/const-xs.inc
+lib/SweetAuth.pm

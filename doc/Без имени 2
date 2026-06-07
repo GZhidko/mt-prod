@@ -1,0 +1,10 @@
+#0  sw_nat_tuple_hash (tuple_chain=0x1100000000) at nat_tuple.c:50
+#1  0x000000000040545c in __prv_hash_cb (r=<optimized out>) at nat_src.c:55
+#2  0x000000000040b2e2 in getrn (lh=lh@entry=0x166fb50, data=data@entry=0x7fff1408fcb0 "", rhash=rhash@entry=0x7fffdf2d0e98, spin=spin@entry=0x7fffdf2d0ec8) at lhash.c:482
+#3  0x000000000040b729 in lh_delete (lh=0x166fb50, data=data@entry=0x7fff1408fcb0 "", spin=spin@entry=0x7fffdf2d0ec8) at lhash.c:274
+#4  0x00000000004054c4 in __expire_current_seq (ri=0x7fff1408fcb0) at nat_src.c:189
+#5  0x000000000040b827 in lh_doall_arg (lh=0x166fc40, func=func@entry=0x405470 <__expire_current_seq>, arg=arg@entry=0x0, nblock=nblock@entry=0) at lhash.c:363
+#6  0x00000000004053f1 in sw_nat_src_rel_expire () at nat_src.c:573
+#7  run_garbage () at nat_src.c:139
+#8  0x00007ffff7bc1684 in start_thread () from /lib64/libpthread.so.0
+#9  0x00007ffff75eeeed in clone () from /lib64/libc.so.6

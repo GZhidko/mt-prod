@@ -30,10 +30,13 @@ libtool
 # Binaries and dumps
 src/sweetspot
 src/sweetuam
+src/libsweetuam.a
+src/libsweetmisc.a
 tests/*b
 tests/*.trs
 tests/*.log
 tests/test-suite.log
+.dirstamp
 core
 core.*
 *.core

@@ -571,6 +571,12 @@ static void cleanup_environment(void) {
     free(g_ip_pool);
     g_ip_pool = NULL;
 
+    /*
+     * Final accounting snapshot still dereferences live session/gauge/filter
+     * structures, so drain the queue before those subsystems are destroyed.
+     */
+    sw_acct_commit(1);
+
     if (uam_server.destroy) {
         uam_server.destroy(&uam_server);
     }
@@ -578,7 +584,6 @@ static void cleanup_environment(void) {
     sw_session_destroy();
     sw_gauge_destroy();
     sw_shape_destroy();
-    sw_acct_commit(1);
     sw_acct_method_destroy();
     sw_lhstat_destroy();
 }

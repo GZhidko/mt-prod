@@ -495,8 +495,9 @@ int sw_session_status_nonblock(uint32_t ip,
   sw_session_entry_t qs, *s;
   qs.ip = ip;
   spinlock * sp = NULL;
-  s = (sw_session_entry_t *)lh_retrieve(global_session_hash, (void *)&qs,NULL);
+  s = (sw_session_entry_t *)lh_retrieve(global_session_hash, (void *)&qs, &sp);
   if (!s) {
+    spinlock_unlock(sp);
     if (sw_debug_flags & SW_DEBUG_SESSION)
       sw_log("%s:%d no session for IP %s",
          __FILE__, __LINE__, sw_pretty_ip(ip));
@@ -510,6 +511,7 @@ int sw_session_status_nonblock(uint32_t ip,
   if (termination_cause) *termination_cause = s->termination_cause;
   if (filter_name && sw_filter_get_name((CONST char **)filter_name, /* XXX */
                                         s->filter_id) == -1) {
+      spinlock_unlock(sp);
       return -1;
   }
   spinlock_unlock(sp);

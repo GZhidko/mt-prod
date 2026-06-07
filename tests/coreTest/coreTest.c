@@ -1279,12 +1279,11 @@ sw_socket_handler_t * r_out;
     pthread_join(threads[NUM_THREADS], NULL);
     pthread_join(threads[NUM_THREADS + 1], NULL);
 
+    sw_acct_commit(1);
     sw_session_destroy();
     sw_gauge_destroy();
     //sw_shape_destroy();
     //sw_shape_queue_destroy();
-
-    sw_acct_commit(1);
     sw_acct_method_destroy();
 
     // Clean up and free the hash table

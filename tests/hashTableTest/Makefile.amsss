@@ -1,7 +1,0 @@
-
-
-# Define the list of test programs
-sbin_PROGRAMS = hashTableTest
-
-
-hashTableTest_SOURCES = hashTableTest.c

@@ -1,6 +1,11 @@
 .svn/
 autom4te.cache/
 *~
+\#*
+*.swp
+*.orig
+*.rej
+*.bak*
 
 # Autotools/configure runtime output
 Makefile
@@ -40,3 +45,4 @@ tests/coreTest/filters_new/
 tests/uamConcurrencyTest/*.log
 tests/uamConcurrencyTest/generated*.conf
 tests/uamConcurrencyTest/filters/
+tests/log.txt
